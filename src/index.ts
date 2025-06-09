@@ -92,7 +92,7 @@ class MemoryMCPServer {
 
           case 'search_memories': {
             const parsed = tools.search_memories.inputSchema.parse(args);
-            const memories = await this.memoryService.searchChunkedMemories({
+            const searchParams: any = {
               query: parsed.query,
               type: parsed.type as MemoryType | undefined,
               minImportance: parsed.minImportance,
@@ -102,7 +102,17 @@ class MemoryMCPServer {
               detailLevel: parsed.detailLevel,
               similarityThreshold: parsed.similarityThreshold,
               reconstructChunks: parsed.reconstructChunks,
-            });
+            };
+            
+            // Add date range if provided
+            if (parsed.dateRange) {
+              searchParams.dateRange = {
+                start: new Date(parsed.dateRange.start),
+                end: new Date(parsed.dateRange.end),
+              };
+            }
+            
+            const memories = await this.memoryService.searchChunkedMemories(searchParams);
             return {
               content: [
                 {

@@ -179,4 +179,23 @@ export class QdrantService {
       })
       .filter((m): m is Memory => m !== null);
   }
+
+  async searchByFilters(filter: any, limit: number = 100): Promise<Memory[]> {
+    const results = await this.client.scroll(this.collectionName, {
+      filter,
+      with_payload: true,
+      limit
+    });
+
+    return results.points
+      .map((point) => {
+        if (!point.payload) return null;
+        return {
+          ...point.payload,
+          timestamp: new Date(point.payload.timestamp as string),
+          lastAccessed: new Date(point.payload.lastAccessed as string),
+        };
+      })
+      .filter((m): m is Memory => m !== null);
+  }
 }

@@ -186,8 +186,6 @@ export class MemoryService {
   }
 
   async searchMemories(params: MemorySearchParams): Promise<Memory[] | CompactMemory[]> {
-    const queryEmbedding = await this.openai.createEmbedding(params.query);
-    
     const filter: any = {
       must: [],
     };
@@ -217,12 +215,26 @@ export class MemoryService {
       });
     }
 
-    const memories = await this.qdrant.searchSimilar(
-      queryEmbedding,
-      params.limit || 10,
-      filter.must.length > 0 ? filter : undefined,
-      params.similarityThreshold
-    );
+    let memories: Memory[];
+    
+    // If query is empty and we have filters, use filter-only search
+    if (!params.query || params.query.trim() === '') {
+      if (filter.must.length > 0) {
+        memories = await this.qdrant.searchByFilters(filter, params.limit || 10);
+      } else {
+        // No query and no filters - return empty results
+        memories = [];
+      }
+    } else {
+      // Query provided - use similarity search
+      const queryEmbedding = await this.openai.createEmbedding(params.query);
+      memories = await this.qdrant.searchSimilar(
+        queryEmbedding,
+        params.limit || 10,
+        filter.must.length > 0 ? filter : undefined,
+        params.similarityThreshold
+      );
+    }
 
     // Update access patterns
     for (const memory of memories) {
