@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import fetch from 'node-fetch';
+const fetch = require('node-fetch');
 
 const execAsync = promisify(exec);
 
@@ -37,16 +37,20 @@ export class UpdaterService {
       // Get current version from package.json
       const currentVersion = await this.getCurrentVersion();
       
-      // Get latest release from GitHub
+      // Get latest release from GitHub with timeout
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
       const response = await fetch(
         `https://api.github.com/repos/${this.REPO_OWNER}/${this.REPO_NAME}/releases/latest`,
         {
           headers: {
             'Accept': 'application/vnd.github.v3+json',
             'User-Agent': 'MCP-Memory-Server'
-          }
+          },
+          signal: controller.signal
         }
-      );
+      ).finally(() => clearTimeout(timeout));
       
       if (!response.ok) {
         throw new Error(`GitHub API error: ${response.status}`);

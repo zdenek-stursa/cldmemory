@@ -395,28 +395,31 @@ class MemoryMCPServer {
   async start() {
     await this.memoryService.initialize();
     
-    // Check for updates on startup
+    // Check for updates on startup (non-blocking)
     console.log('🔍 Checking for updates...');
-    const updateInfo = await this.updaterService.checkForUpdates();
-    if (updateInfo.hasUpdate) {
-      console.log(`🔔 Update available: v${updateInfo.currentVersion} → v${updateInfo.latestVersion}`);
-      console.log('   Run the "check_update" tool to see details or "perform_update" to update');
-      
-      // Store update notification in memory
-      try {
-        await this.memoryService.createMemory(
-          `MCP Memory Server update available: v${updateInfo.currentVersion} → v${updateInfo.latestVersion}. ${updateInfo.changes || 'Check GitHub for details.'}`,
-          MemoryType.SEMANTIC,
-          { tags: ['system-update', 'mcp-server', 'version-' + updateInfo.latestVersion] },
-          0.8,
-          `Update available: v${updateInfo.latestVersion}`
-        );
-      } catch (e) {
-        // Ignore if memory storage fails
-      }
-    } else {
-      console.log('✅ You are running the latest version');
-    }
+    this.updaterService.checkForUpdates()
+      .then(updateInfo => {
+        if (updateInfo.hasUpdate) {
+          console.log(`🔔 Update available: v${updateInfo.currentVersion} → v${updateInfo.latestVersion}`);
+          console.log('   Run the "check_update" tool to see details or "perform_update" to update');
+          
+          // Store update notification in memory
+          this.memoryService.createMemory(
+            `MCP Memory Server update available: v${updateInfo.currentVersion} → v${updateInfo.latestVersion}. ${updateInfo.changes || 'Check GitHub for details.'}`,
+            MemoryType.SEMANTIC,
+            { tags: ['system-update', 'mcp-server', 'version-' + updateInfo.latestVersion] },
+            0.8,
+            `Update available: v${updateInfo.latestVersion}`
+          ).catch(() => {
+            // Ignore if memory storage fails
+          });
+        } else {
+          console.log('✅ You are running the latest version');
+        }
+      })
+      .catch(error => {
+        console.log('⚠️  Could not check for updates:', error.message);
+      });
     
     // Start periodic update checks (every 30 minutes)
     this.updaterService.startPeriodicChecks(30);
