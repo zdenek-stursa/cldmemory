@@ -3,9 +3,10 @@ import { MemoryType } from '../types/memory';
 
 export const tools = {
   store_memory: {
-    description: 'Store a new memory with human-like characteristics',
+    description: 'Store a new memory with BOTH summary and content. Summary should be 1-2 sentences capturing the essence. Content is the full detailed version. This dual approach saves context during searches. Use semantic type for facts/knowledge, episodic for events/experiences, procedural for how-to instructions. Always include relevant tags for better searchability. Set importance 0.8-1.0 for critical info, 0.5-0.7 for normal, 0.1-0.4 for minor details.',
     inputSchema: z.object({
-      content: z.string().describe('The memory content'),
+      summary: z.string().optional().describe('Short 1-2 sentence summary capturing the essence of the memory. If not provided, auto-generated from content.'),
+      content: z.string().describe('Full detailed memory content'),
       type: z.enum([
         'episodic',
         'semantic',
@@ -27,8 +28,9 @@ export const tools = {
   },
 
   store_memory_chunked: {
-    description: 'Store a large memory with automatic semantic chunking',
+    description: 'Store a large memory with automatic semantic chunking. Provide a summary for the entire memory and the full content will be chunked.',
     inputSchema: z.object({
+      summary: z.string().optional().describe('Short 1-2 sentence summary of the entire memory. If not provided, auto-generated.'),
       content: z.string().describe('The memory content (can be very long)'),
       type: z.enum([
         'episodic',
@@ -57,9 +59,9 @@ export const tools = {
   },
 
   search_memories: {
-    description: 'Search for memories using natural language',
+    description: 'Search for memories using natural language. Returns memories sorted by relevance. Empty query returns all memories matching filters. Use lower similarityThreshold (0.2-0.3) for broader results, higher (0.5-0.7) for exact matches. Default threshold is configured in environment (currently 0.3).',
     inputSchema: z.object({
-      query: z.string().describe('Search query'),
+      query: z.string().describe('Search query in natural language. Can be empty to return all memories matching other filters'),
       type: z.enum([
         'episodic',
         'semantic',
@@ -80,7 +82,7 @@ export const tools = {
       limit: z.number().min(1).max(50).default(10).describe('Number of results'),
       includeAssociations: z.boolean().default(false).describe('Include associated memories'),
       detailLevel: z.enum(['compact', 'full']).default('compact').describe('Level of detail to return'),
-      similarityThreshold: z.number().min(0).max(1).optional().describe('Minimum similarity score (0-1) - default is 0.7'),
+      similarityThreshold: z.number().min(0).max(1).optional().describe('Minimum similarity score (0-1). Lower values (0.2-0.3) return more results, higher values (0.5-0.7) return only close matches. Default uses environment config.'),
       reconstructChunks: z.boolean().default(false).describe('Reconstruct full content from chunks'),
     }),
   },
@@ -118,7 +120,7 @@ export const tools = {
   },
 
   analyze_memories: {
-    description: 'Analyze memory patterns and connections',
+    description: 'Analyze memory patterns, statistics, and connections. Returns counts by type, importance distribution, emotional patterns, and temporal trends. Useful for understanding memory corpus.',
     inputSchema: z.object({
       timeRange: z.object({
         start: z.string().describe('ISO date string'),
@@ -164,7 +166,7 @@ export const tools = {
   },
 
   get_association_graph: {
-    description: 'Get the network graph of memory associations',
+    description: 'Get network graph of memory associations. Shows how memories connect to each other. Use depth=1 for immediate connections, depth=2-3 for broader context. Returns nodes and edges for visualization.', 
     inputSchema: z.object({
       centerMemoryId: z.string().optional().describe('Center the graph on this memory'),
       depth: z.number().min(1).max(5).default(2).describe('Levels of connections to include'),

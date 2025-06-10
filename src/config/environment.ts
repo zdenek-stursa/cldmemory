@@ -17,4 +17,4 @@ const envSchema = z.object({
 export const config = envSchema.parse(process.env);
 
 export const VECTOR_DIMENSION = 1536; // for text-embedding-3-small
-export const DEFAULT_SIMILARITY_THRESHOLD = 0.7; // Cosine similarity threshold
+export const DEFAULT_SIMILARITY_THRESHOLD = config.SIMILARITY_THRESHOLD || 0.3; // Use configured value or fallback

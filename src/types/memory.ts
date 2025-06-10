@@ -1,6 +1,7 @@
 export interface Memory {
   id: string;
-  content: string;
+  summary: string; // Short 1-2 sentence summary for context-efficient retrieval
+  content: string; // Full detailed content
   type: MemoryType;
   timestamp: Date;
   importance: number; // 0-1 scale
@@ -51,7 +52,7 @@ export interface MemorySearchParams {
 
 export interface CompactMemory {
   id: string;
-  content: string;
+  summary: string; // Only summary in compact mode for context efficiency
   type: MemoryType;
   timestamp: Date;
   importance: number;

@@ -24,7 +24,8 @@ export class MemoryService {
     type: MemoryType,
     context?: Partial<MemoryContext>,
     importance?: number,
-    chunkingOptions?: ChunkingOptions
+    chunkingOptions?: ChunkingOptions,
+    summary?: string
   ): Promise<Memory[]> {
     // Use semantic chunking by default for long content
     const options: ChunkingOptions = chunkingOptions || {
@@ -38,7 +39,7 @@ export class MemoryService {
     const estimatedTokens = Math.ceil(content.length / 4);
     if (estimatedTokens <= (options.maxChunkSize || 1000)) {
       // Content is small enough, create single memory
-      const memory = await this.createMemory(content, type, context, importance);
+      const memory = await this.createMemory(content, type, context, importance, summary);
       return [memory];
     }
     
@@ -47,11 +48,13 @@ export class MemoryService {
     const memories: Memory[] = [];
     
     // Create a parent memory for the full content
+    const parentSummary = summary || `Chunked memory containing ${chunks.length} parts about: ${content.substring(0, 100)}...`;
     const parentMemory = await this.createMemory(
       `[Chunked Memory - ${chunks.length} parts] ${content.substring(0, 200)}...`,
       type,
       { ...context, isParentChunk: true, totalChunks: chunks.length },
-      importance || 0.8 // Parent chunks are generally important
+      importance || 0.8, // Parent chunks are generally important
+      parentSummary
     );
     memories.push(parentMemory);
     
@@ -95,7 +98,8 @@ export class MemoryService {
     content: string,
     type: MemoryType,
     context?: Partial<MemoryContext>,
-    importance?: number
+    importance?: number,
+    summary?: string
   ): Promise<Memory> {
     // Validate content
     if (!content || content.trim().length === 0) {
@@ -107,8 +111,12 @@ export class MemoryService {
       throw new Error('Importance must be between 0 and 1');
     }
     
+    // Generate summary if not provided
+    const memorySummary = summary || await this.generateSummary(content);
+    
     const memory: Memory = {
       id: uuidv4(),
+      summary: memorySummary,
       content,
       type,
       timestamp: new Date(),
@@ -275,9 +283,7 @@ export class MemoryService {
   private toCompactMemories(memories: Memory[]): CompactMemory[] {
     return memories.map(memory => ({
       id: memory.id,
-      content: memory.content.length > 200 
-        ? memory.content.substring(0, 197) + '...' 
-        : memory.content,
+      summary: memory.summary, // Use summary instead of truncated content
       type: memory.type,
       timestamp: memory.timestamp,
       importance: memory.importance,
@@ -594,6 +600,11 @@ export class MemoryService {
         averageConnections: edges.size / Math.max(nodes.size, 1),
       },
     };
+  }
+
+  private async generateSummary(content: string): Promise<string> {
+    // Use OpenAI to generate proper summary
+    return await this.openai.generateSummary(content);
   }
 
   private prepareMemoryForEmbedding(memory: Memory): string {

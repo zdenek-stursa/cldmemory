@@ -39,7 +39,7 @@ export class OpenAIService {
   async extractKeywords(text: string): Promise<string[]> {
     try {
       const response = await this.client.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',
@@ -61,10 +61,35 @@ export class OpenAIService {
     }
   }
 
+  async generateSummary(text: string): Promise<string> {
+    try {
+      const response = await this.client.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: 'Create a concise 1-2 sentence summary capturing the essence of the text. Be specific and informative.',
+          },
+          {
+            role: 'user',
+            content: text,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 60,
+      });
+
+      return response.choices[0].message.content?.trim() || text.substring(0, 150) + '...';
+    } catch (error) {
+      // Fallback to truncation
+      return text.length > 150 ? text.substring(0, 147) + '...' : text;
+    }
+  }
+
   async analyzeEmotion(text: string): Promise<number> {
     try {
       const response = await this.client.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',
@@ -89,7 +114,7 @@ export class OpenAIService {
   async summarizeTexts(texts: string[]): Promise<string> {
     try {
       const response = await this.client.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',
