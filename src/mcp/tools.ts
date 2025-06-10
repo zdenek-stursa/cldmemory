@@ -2,17 +2,6 @@ import { z } from 'zod';
 import { MemoryType } from '../types/memory';
 
 export const tools = {
-  check_update: {
-    description: 'Check if a newer version of the MCP Memory Server is available',
-    inputSchema: z.object({}),
-  },
-
-  perform_update: {
-    description: 'Update the MCP Memory Server to the latest version. Server restart required after update.',
-    inputSchema: z.object({
-      confirm: z.boolean().describe('Confirm that you want to perform the update')
-    }),
-  },
   store_memory: {
     description: 'Store a new memory with BOTH summary and content. Summary should be 1-2 sentences capturing the essence. Content is the full detailed version. This dual approach saves context during searches. Use semantic type for facts/knowledge, episodic for events/experiences, procedural for how-to instructions. Always include relevant tags for better searchability. Set importance 0.8-1.0 for critical info, 0.5-0.7 for normal, 0.1-0.4 for minor details.',
     inputSchema: z.object({

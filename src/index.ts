@@ -12,16 +12,13 @@ import { MemoryType } from './types/memory';
 import { tools } from './mcp/tools';
 import { config } from './config/environment';
 import { zodToJsonSchema } from './utils/zodToJsonSchema';
-import { UpdaterService } from './services/updater';
 
 class MemoryMCPServer {
   private server: Server;
   private memoryService: MemoryService;
-  private updaterService: UpdaterService;
 
   constructor() {
     this.memoryService = new MemoryService();
-    this.updaterService = new UpdaterService();
     this.server = new Server(
       {
         name: config.MCP_SERVER_NAME,
@@ -51,41 +48,6 @@ class MemoryMCPServer {
 
       try {
         switch (name) {
-          case 'check_update': {
-            const updateInfo = await this.updaterService.checkForUpdates();
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(updateInfo, null, 2),
-                },
-              ],
-            };
-          }
-
-          case 'perform_update': {
-            const parsed = tools.perform_update.inputSchema.parse(args);
-            if (!parsed.confirm) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Update cancelled. Set confirm to true to proceed.',
-                  },
-                ],
-              };
-            }
-            
-            const result = await this.updaterService.performUpdate();
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: result.message,
-                },
-              ],
-            };
-          }
 
           case 'store_memory': {
             const parsed = tools.store_memory.inputSchema.parse(args);
@@ -394,36 +356,6 @@ class MemoryMCPServer {
 
   async start() {
     await this.memoryService.initialize();
-    
-    // Check for updates on startup (non-blocking)
-    console.log('🔍 Checking for updates...');
-    this.updaterService.checkForUpdates()
-      .then(updateInfo => {
-        if (updateInfo.hasUpdate) {
-          console.log(`🔔 Update available: v${updateInfo.currentVersion} → v${updateInfo.latestVersion}`);
-          console.log('   Run the "check_update" tool to see details or "perform_update" to update');
-          
-          // Store update notification in memory
-          this.memoryService.createMemory(
-            `MCP Memory Server update available: v${updateInfo.currentVersion} → v${updateInfo.latestVersion}. ${updateInfo.changes || 'Check GitHub for details.'}`,
-            MemoryType.SEMANTIC,
-            { tags: ['system-update', 'mcp-server', 'version-' + updateInfo.latestVersion] },
-            0.8,
-            `Update available: v${updateInfo.latestVersion}`
-          ).catch(() => {
-            // Ignore if memory storage fails
-          });
-        } else {
-          console.log('✅ You are running the latest version');
-        }
-      })
-      .catch(error => {
-        console.log('⚠️  Could not check for updates:', error.message);
-      });
-    
-    // Start periodic update checks (every 30 minutes)
-    this.updaterService.startPeriodicChecks(30);
-    
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
   }
