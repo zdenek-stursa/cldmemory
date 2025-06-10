@@ -2,6 +2,24 @@
 
 A human-like memory system using Qdrant vector database and OpenAI embeddings, accessible through the Model Context Protocol (MCP).
 
+## 🔄 Automatické aktualizace
+
+### Rychlá aktualizace
+```bash
+./update.sh
+# nebo
+npm run update
+```
+
+### Automatické sledování aktualizací
+```bash
+./watch-updates.sh
+# nebo
+npm run watch-updates
+```
+
+Skript kontroluje nové verze každých 5 minut a upozorní vás.
+
 ## Features
 
 - **Human-like Memory Types**:
