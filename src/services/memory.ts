@@ -33,9 +33,20 @@ export class MemoryService {
     // Parse comma-separated key:value pairs
     const pairs = metadataStr.split(',');
     for (const pair of pairs) {
-      const [key, value] = pair.split(':').map(s => s.trim());
-      if (key && value) {
-        metadata[key] = value;
+      const colonIndex = pair.indexOf(':');
+      if (colonIndex > -1) {
+        // Handle key:value format
+        const key = pair.substring(0, colonIndex).trim();
+        const value = pair.substring(colonIndex + 1).trim();
+        if (key && value) {
+          metadata[key] = value;
+        }
+      } else {
+        // Handle single value without colon - use it as a 'user' key
+        const value = pair.trim();
+        if (value) {
+          metadata['user'] = value;
+        }
       }
     }
     

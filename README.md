@@ -35,7 +35,9 @@ A human-like memory system using Qdrant vector database and OpenAI embeddings, a
    ```
 
    **New environment variables**:
-   - `MEMORY_METADATA` - Optional metadata to include with all memories (e.g., `"server:prod,user:john"`)
+   - `MEMORY_METADATA` - Optional metadata to include with all memories
+     - Format: `"key:value,key2:value2"` or just `"value"` (stored as `user:value`)
+     - Examples: `"server:prod,user:john"` or `"davidstrejc"`
 
 3. **Start Qdrant** (if using local):
    ```bash
