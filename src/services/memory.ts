@@ -3,6 +3,9 @@ import { Memory, MemoryType, MemorySearchParams, MemoryContext, CompactMemory } 
 import { QdrantService } from './qdrant';
 import { OpenAIService } from './openai';
 import { ChunkingService, ChunkingOptions, TextChunk } from './chunking';
+import { config } from '../config/environment';
+import * as os from 'os';
+import * as path from 'path';
 
 export class MemoryService {
   private qdrant: QdrantService;
@@ -13,6 +16,30 @@ export class MemoryService {
     this.qdrant = new QdrantService();
     this.openai = new OpenAIService();
     this.chunking = new ChunkingService();
+  }
+
+  private getProjectInfo(): string {
+    const hostname = os.hostname();
+    const folder = process.cwd();
+    return `${hostname}:${folder}`;
+  }
+
+  private parseMemoryMetadata(): Record<string, string> {
+    const metadata: Record<string, string> = {};
+    const metadataStr = config.MEMORY_METADATA;
+    
+    if (!metadataStr) return metadata;
+    
+    // Parse comma-separated key:value pairs
+    const pairs = metadataStr.split(',');
+    for (const pair of pairs) {
+      const [key, value] = pair.split(':').map(s => s.trim());
+      if (key && value) {
+        metadata[key] = value;
+      }
+    }
+    
+    return metadata;
   }
 
   async initialize(): Promise<void> {
@@ -114,6 +141,9 @@ export class MemoryService {
     // Generate summary if not provided
     const memorySummary = summary || await this.generateSummary(content);
     
+    // Merge environment metadata with any existing metadata
+    const envMetadata = this.parseMemoryMetadata();
+    
     const memory: Memory = {
       id: uuidv4(),
       summary: memorySummary,
@@ -127,10 +157,13 @@ export class MemoryService {
         tags: await this.openai.extractKeywords(content),
         ...context,
       },
-      metadata: {},
+      metadata: {
+        ...envMetadata,
+      },
       lastAccessed: new Date(),
       accessCount: 0,
       decay: 0,
+      project: this.getProjectInfo(),
     };
 
     const embedding = await this.openai.createEmbedding(this.prepareMemoryForEmbedding(memory));
@@ -235,7 +268,20 @@ export class MemoryService {
       }
     } else {
       // Query provided - use similarity search
-      const queryEmbedding = await this.openai.createEmbedding(params.query);
+      // Include metadata and project info in query embedding for better matching
+      const envMetadata = this.parseMemoryMetadata();
+      const metadataStr = Object.entries(envMetadata)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('; ');
+      const projectInfo = this.getProjectInfo();
+      
+      let enhancedQuery = params.query;
+      if (metadataStr) {
+        enhancedQuery += `\nMetadata: ${metadataStr}`;
+      }
+      enhancedQuery += `\nProject: ${projectInfo}`;
+      
+      const queryEmbedding = await this.openai.createEmbedding(enhancedQuery);
       memories = await this.qdrant.searchSimilar(
         queryEmbedding,
         params.limit || 10,
@@ -288,7 +334,8 @@ export class MemoryService {
       timestamp: memory.timestamp,
       importance: memory.importance,
       emotionalValence: memory.emotionalValence,
-      tags: memory.context.tags
+      tags: memory.context.tags,
+      project: memory.project
     }));
   }
 
@@ -618,8 +665,23 @@ export class MemoryService {
       .filter(([_, v]) => v)
       .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
       .join('; ');
+    
+    const metadataStr = Object.entries(memory.metadata)
+      .filter(([_, v]) => v)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('; ');
 
-    return `${memory.content}\n\nType: ${memory.type}\nContext: ${contextStr}`;
+    let embeddingText = `${memory.content}\n\nType: ${memory.type}\nContext: ${contextStr}`;
+    
+    if (metadataStr) {
+      embeddingText += `\nMetadata: ${metadataStr}`;
+    }
+    
+    if (memory.project) {
+      embeddingText += `\nProject: ${memory.project}`;
+    }
+
+    return embeddingText;
   }
 
   private calculateImportance(content: string, type: MemoryType): number {

@@ -18,6 +18,8 @@ A human-like memory system using Qdrant vector database and OpenAI embeddings, a
   - Associations between memories
   - Context (location, people, mood, activity)
   - Decay factor and access tracking
+  - Automatic project tracking (hostname:folder)
+  - Custom metadata via environment variables
 
 ## Setup
 
@@ -31,6 +33,9 @@ A human-like memory system using Qdrant vector database and OpenAI embeddings, a
    cp .env.example .env
    # Edit .env with your settings
    ```
+
+   **New environment variables**:
+   - `MEMORY_METADATA` - Optional metadata to include with all memories (e.g., `"server:prod,user:john"`)
 
 3. **Start Qdrant** (if using local):
    ```bash
@@ -91,6 +96,20 @@ search_memories({
   "includeAssociations": true
 })
 ```
+
+### New Features
+
+**Automatic Project Tracking**: All memories now include a `project` field that captures the hostname and current working directory (e.g., `"myserver:/home/user/project"`).
+
+**Environment Metadata**: Set the `MEMORY_METADATA` environment variable to automatically include custom metadata in all memories:
+```bash
+export MEMORY_METADATA="server:production,team:engineering,region:us-west"
+```
+
+This metadata is automatically:
+- Added to all new memories
+- Included in memory embeddings for better search relevance
+- Used in search queries to improve context matching
 
 ## Development
 

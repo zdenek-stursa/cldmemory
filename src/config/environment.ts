@@ -12,6 +12,7 @@ const envSchema = z.object({
   MCP_SERVER_NAME: z.string(),
   MCP_SERVER_PORT: z.string().transform(Number),
   SIMILARITY_THRESHOLD: z.string().transform(Number).default('0.7'),
+  MEMORY_METADATA: z.string().optional(),
 });
 
 export const config = envSchema.parse(process.env);

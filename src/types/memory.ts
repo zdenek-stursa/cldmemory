@@ -12,6 +12,7 @@ export interface Memory {
   lastAccessed: Date;
   accessCount: number;
   decay: number; // 0-1 scale, how much the memory has faded
+  project?: string; // hostname + folder path
 }
 
 export enum MemoryType {
@@ -58,6 +59,7 @@ export interface CompactMemory {
   importance: number;
   emotionalValence: number;
   tags?: string[];
+  project?: string; // hostname + folder path
 }
 
 export interface MemoryCluster {

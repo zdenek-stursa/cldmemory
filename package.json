@@ -10,7 +10,8 @@
     "test": "tsx tests/test-mcp.ts",
     "test:update": "tsx tests/test-memory-update.ts",
     "test:concurrent": "tsx tests/test-concurrent-updates.ts",
-    "test:all": "npm run test:update && npm run test:concurrent",
+    "test:metadata": "tsx tests/test-metadata.ts",
+    "test:all": "npm run test:update && npm run test:concurrent && npm run test:metadata",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"
   },
