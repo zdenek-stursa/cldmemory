@@ -304,6 +304,12 @@ export class MemoryService {
   }
 
   async updateMemory(id: string, updates: Partial<Memory>): Promise<Memory | null> {
+    // Validate ID format first
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return null; // Invalid ID format
+    }
+    
     const memory = await this.qdrant.getMemory(id);
     if (!memory) return null;
 
