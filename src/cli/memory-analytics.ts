@@ -292,26 +292,90 @@ class MemoryAnalyticsCLI {
 
   private async getAllMemories(): Promise<Memory[]> {
     const memories: Memory[] = [];
-    let offset = 0;
-    const limit = 100;
     
-    while (true) {
-      const response = await this.qdrant.scroll(this.collectionName, {
-        limit,
-        offset,
+    try {
+      // Get collection info first
+      const info = await this.qdrant.getCollection(this.collectionName);
+      const totalPoints = info.points_count || 0;
+      
+      if (totalPoints === 0) return memories;
+      
+      console.log(chalk.gray(`Loading ${totalPoints} memories...`));
+      
+      // Use search with random vectors to get all memories in batches
+      const batchSize = 100;
+      const batches = Math.ceil(totalPoints / batchSize);
+      
+      for (let i = 0; i < batches; i++) {
+        try {
+          // Generate random vector for each batch to get different results
+          const randomVector = Array(1536).fill(0).map(() => Math.random() - 0.5);
+          
+          const response = await this.qdrant.search(this.collectionName, {
+            vector: randomVector,
+            limit: batchSize,
+            offset: i * batchSize,
+            with_payload: true,
+            with_vector: false
+          });
+          
+          if (response && response.length > 0) {
+            for (const result of response) {
+              if (result.payload) {
+                memories.push(result.payload as unknown as Memory);
+              }
+            }
+          }
+          
+          if (memories.length % 500 === 0) {
+            console.log(chalk.gray(`Loaded ${memories.length}/${totalPoints} memories...`));
+          }
+        } catch (error) {
+          console.error(chalk.red(`Error in batch ${i}:`), error);
+          // Continue with next batch
+        }
+      }
+      
+      // Remove duplicates based on ID
+      const uniqueMemories = new Map<string, Memory>();
+      for (const memory of memories) {
+        if (memory.id) {
+          uniqueMemories.set(memory.id, memory);
+        }
+      }
+      
+      const finalMemories = Array.from(uniqueMemories.values());
+      console.log(chalk.gray(`Total unique memories loaded: ${finalMemories.length}`));
+      
+      return finalMemories;
+    } catch (error) {
+      console.error(chalk.red('Error loading memories:'), error);
+      // Fallback to sampling
+      console.log(chalk.yellow('Falling back to sampling mode...'));
+      return this.sampleMemories(1000);
+    }
+  }
+  
+  private async sampleMemories(sampleSize: number = 1000): Promise<Memory[]> {
+    const memories: Memory[] = [];
+    
+    try {
+      const response = await this.qdrant.search(this.collectionName, {
+        vector: Array(1536).fill(0),
+        limit: Math.min(sampleSize, 1000),
         with_payload: true,
         with_vector: false
       });
       
-      if (!response.points || response.points.length === 0) break;
-      
-      for (const point of response.points) {
-        if (point.payload) {
-          memories.push(point.payload as unknown as Memory);
+      if (response && response.length > 0) {
+        for (const result of response) {
+          if (result.payload) {
+            memories.push(result.payload as unknown as Memory);
+          }
         }
       }
-      
-      offset += limit;
+    } catch (error) {
+      console.error(chalk.red('Error sampling memories:'), error);
     }
     
     return memories;
