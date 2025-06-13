@@ -524,12 +524,14 @@ class MemoryMCPServer {
         switch (name) {
           case 'store_memory': {
             const parsed = tools.store_memory.inputSchema.parse(args);
+            const clientMetadata = (args as any)._clientMetadata;
             const memory = await this.memoryService.createMemory(
               parsed.content,
               parsed.type as MemoryType,
               parsed.context,
               parsed.importance,
-              parsed.summary
+              parsed.summary,
+              clientMetadata
             );
             return {
               content: [
@@ -543,13 +545,15 @@ class MemoryMCPServer {
 
           case 'store_memory_chunked': {
             const parsed = tools.store_memory_chunked.inputSchema.parse(args);
+            const clientMetadata = (args as any)._clientMetadata;
             const memories = await this.memoryService.createMemoryWithChunking(
               parsed.content,
               parsed.type as MemoryType,
               parsed.context,
               parsed.importance,
               parsed.chunkingOptions,
-              parsed.summary
+              parsed.summary,
+              clientMetadata
             );
             return {
               content: [

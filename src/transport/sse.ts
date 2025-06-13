@@ -11,10 +11,16 @@ export interface SSETransportOptions {
   host?: string;
 }
 
+export interface ClientMetadata {
+  sessionId: string;
+  metadata: Record<string, string>;
+}
+
 export class SSETransportServer {
   private app: express.Application;
   private server?: import('http').Server;
   private transports = new Map<string, SSEServerTransport>();
+  private clientMetadata = new Map<string, Record<string, string>>();
   private port: number;
   private host: string;
 
@@ -52,7 +58,7 @@ export class SSETransportServer {
         }
       },
       methods: ['GET', 'POST', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Mcp-Session-Id'],
+      allowedHeaders: ['Content-Type', 'Mcp-Session-Id', 'Memory-Metadata'],
       credentials: true
     }));
 
@@ -71,6 +77,10 @@ export class SSETransportServer {
     // SSE endpoint for server-to-client notifications
     this.app.get('/sse', async (req, res) => {
       try {
+        // Extract client metadata from headers or query parameters
+        const clientMetadataString = req.headers['memory-metadata'] as string || 
+                                    req.query.memoryMetadata as string || '';
+        
         // Create SSE transport - it will auto-generate sessionId
         const transport = new SSEServerTransport('/messages', res);
         
@@ -78,18 +88,27 @@ export class SSETransportServer {
         const sessionId = transport.sessionId;
         this.transports.set(sessionId, transport);
 
+        // Store client metadata for this session
+        if (clientMetadataString) {
+          const metadata = this.parseClientMetadata(clientMetadataString);
+          this.clientMetadata.set(sessionId, metadata);
+          console.log(`Client metadata for session ${sessionId}:`, metadata);
+        }
+
         // Store session ID for client reference
         res.setHeader('Mcp-Session-Id', sessionId);
 
         // Cleanup on connection close
         res.on('close', () => {
           this.transports.delete(sessionId);
+          this.clientMetadata.delete(sessionId);
           console.log(`SSE connection closed for session: ${sessionId}`);
         });
 
         res.on('error', (error) => {
           console.error(`SSE connection error for session ${sessionId}:`, error);
           this.transports.delete(sessionId);
+          this.clientMetadata.delete(sessionId);
         });
 
         console.log(`SSE connection established for session: ${sessionId}`);
@@ -153,8 +172,20 @@ export class SSETransportServer {
 
         console.log(`Processing message for session: ${sessionId}`);
 
+        // Inject client metadata into store_memory requests
+        const body = req.body;
+        if (body && body.method === 'tools/call' && 
+            body.params && (body.params.name === 'store_memory' || body.params.name === 'store_memory_chunked')) {
+          const clientMetadata = this.getClientMetadata(sessionId);
+          if (clientMetadata) {
+            // Add client metadata to arguments
+            body.params.arguments._clientMetadata = this.formatMetadata(clientMetadata);
+            console.log(`Added client metadata to ${body.params.name}:`, clientMetadata);
+          }
+        }
+
         // Handle the POST message through the transport
-        await transport.handlePostMessage(req, res, req.body);
+        await transport.handlePostMessage(req, res, body);
         console.log(`Message processed successfully for session: ${sessionId}`);
 
       } catch (error) {
@@ -263,5 +294,53 @@ export class SSETransportServer {
         health: `http://${this.host}:${this.port}/health`
       }
     };
+  }
+
+  /**
+   * Parse client metadata string in the same format as server MEMORY_METADATA
+   * Format: "key:value,key2:value2" or just "value" (stored as user:value)
+   */
+  private parseClientMetadata(metadataStr: string): Record<string, string> {
+    const metadata: Record<string, string> = {};
+    
+    if (!metadataStr) return metadata;
+    
+    // Parse comma-separated key:value pairs
+    const pairs = metadataStr.split(',');
+    for (const pair of pairs) {
+      const colonIndex = pair.indexOf(':');
+      if (colonIndex > -1) {
+        // Handle key:value format
+        const key = pair.substring(0, colonIndex).trim();
+        const value = pair.substring(colonIndex + 1).trim();
+        if (key && value) {
+          metadata[key] = value;
+        }
+      } else {
+        // Handle single value without colon - use it as a 'user' key
+        const value = pair.trim();
+        if (value) {
+          metadata['user'] = value;
+        }
+      }
+    }
+    
+    return metadata;
+  }
+
+  /**
+   * Get client metadata for a specific session
+   */
+  getClientMetadata(sessionId: string): Record<string, string> | undefined {
+    return this.clientMetadata.get(sessionId);
+  }
+
+  /**
+   * Convert metadata object back to string format
+   */
+  formatMetadata(metadata: Record<string, string>): string {
+    return Object.entries(metadata)
+      .map(([key, value]) => `${key}:${value}`)
+      .join(',');
   }
 }

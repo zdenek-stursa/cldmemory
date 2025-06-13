@@ -25,8 +25,11 @@ export class MemoryService {
   }
 
   private parseMemoryMetadata(): Record<string, string> {
+    return this.parseMetadataString(config.MEMORY_METADATA);
+  }
+
+  private parseMetadataString(metadataStr?: string): Record<string, string> {
     const metadata: Record<string, string> = {};
-    const metadataStr = config.MEMORY_METADATA;
     
     if (!metadataStr) return metadata;
     
@@ -63,7 +66,8 @@ export class MemoryService {
     context?: Partial<MemoryContext>,
     importance?: number,
     chunkingOptions?: ChunkingOptions,
-    summary?: string
+    summary?: string,
+    clientMetadata?: string
   ): Promise<Memory[]> {
     // Use semantic chunking by default for long content
     const options: ChunkingOptions = chunkingOptions || {
@@ -77,7 +81,7 @@ export class MemoryService {
     const estimatedTokens = Math.ceil(content.length / 4);
     if (estimatedTokens <= (options.maxChunkSize || 1000)) {
       // Content is small enough, create single memory
-      const memory = await this.createMemory(content, type, context, importance, summary);
+      const memory = await this.createMemory(content, type, context, importance, summary, clientMetadata);
       return [memory];
     }
     
@@ -92,7 +96,8 @@ export class MemoryService {
       type,
       { ...context, isParentChunk: true, totalChunks: chunks.length },
       importance || 0.8, // Parent chunks are generally important
-      parentSummary
+      parentSummary,
+      clientMetadata
     );
     memories.push(parentMemory);
     
@@ -115,7 +120,9 @@ export class MemoryService {
         chunk.content,
         type,
         chunkContext,
-        adjustedImportance
+        adjustedImportance,
+        undefined, // no summary for chunks
+        clientMetadata
       );
       
       // Link chunk to parent
@@ -137,7 +144,8 @@ export class MemoryService {
     type: MemoryType,
     context?: Partial<MemoryContext>,
     importance?: number,
-    summary?: string
+    summary?: string,
+    clientMetadata?: string
   ): Promise<Memory> {
     // Validate content
     if (!content || content.trim().length === 0) {
@@ -152,8 +160,10 @@ export class MemoryService {
     // Generate summary if not provided
     const memorySummary = summary || await this.generateSummary(content);
     
-    // Merge environment metadata with any existing metadata
+    // Merge client metadata (priority) with environment metadata (fallback)
     const envMetadata = this.parseMemoryMetadata();
+    const clientMeta = clientMetadata ? this.parseMetadataString(clientMetadata) : {};
+    const finalMetadata = { ...envMetadata, ...clientMeta };
     
     const memory: Memory = {
       id: uuidv4(),
@@ -169,7 +179,7 @@ export class MemoryService {
         ...context,
       },
       metadata: {
-        ...envMetadata,
+        ...finalMetadata,
       },
       lastAccessed: new Date(),
       accessCount: 0,
