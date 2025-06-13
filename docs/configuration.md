@@ -18,6 +18,22 @@ The server uses environment variables for configuration. These can be set in a `
 | `MCP_SERVER_NAME` | Name of the MCP server | `memory-server` | Yes |
 | `MCP_SERVER_PORT` | Port for the MCP server | `3000` | Yes |
 
+### Transport Configuration
+
+| Variable | Description | Default | Options |
+|----------|-------------|---------|---------|
+| `MCP_TRANSPORT_MODE` | Transport protocol mode | `stdio` | `stdio`, `sse`, `both` |
+| `MCP_PORT` | Port for SSE transport | `3000` | Any valid port |
+| `MCP_HOST` | Host binding for SSE transport | `localhost` | IP address or hostname |
+| `MCP_CORS_ORIGIN` | CORS origin for SSE transport | `*` | Origin URL or `*` |
+
+### Memory Metadata Configuration
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `MEMORY_METADATA` | Automatic metadata for all memories | `user:john,env:prod` |
+| `SIMILARITY_THRESHOLD` | Default similarity threshold for search | `0.7` |
+
 ### Advanced Configuration
 
 ```bash
@@ -34,24 +50,35 @@ DEFAULT_SEARCH_LIMIT=10
 MAX_SEARCH_LIMIT=50
 ```
 
+## Transport Modes
+
+The memory server supports three transport modes:
+
+### STDIO Transport (Default)
+- **Protocol**: Standard MCP over stdin/stdout
+- **Use case**: Claude Code integration
+- **Configuration**: `MCP_TRANSPORT_MODE=stdio`
+
+### SSE Transport (HTTP)
+- **Protocol**: Server-Sent Events over HTTP
+- **Use case**: Web applications, HTTP clients
+- **Configuration**: `MCP_TRANSPORT_MODE=sse`
+- **Endpoints**:
+  - `GET /sse` - Establish SSE connection
+  - `POST /messages` - Send MCP messages
+  - `GET /health` - Health check
+  - `GET /ping` - Ping endpoint
+
+### Dual Transport Mode
+- **Protocol**: Both STDIO and SSE simultaneously
+- **Use case**: Support multiple client types
+- **Configuration**: `MCP_TRANSPORT_MODE=both`
+
 ## MCP Configuration File
 
 The `claude-code-mcp.json` file configures how Claude Code connects to your server.
 
-### Basic Configuration
-
-```json
-{
-  "mcpServers": {
-    "memory": {
-      "command": "node",
-      "args": ["/absolute/path/to/dist/index.js"]
-    }
-  }
-}
-```
-
-### With Environment Variables
+### STDIO Configuration (Default)
 
 ```json
 {
@@ -60,19 +87,54 @@ The `claude-code-mcp.json` file configures how Claude Code connects to your serv
       "command": "node",
       "args": ["/absolute/path/to/dist/index.js"],
       "env": {
-        "NODE_ENV": "production",
-        "QDRANT_URL": "http://localhost:6333",
-        "OPENAI_API_KEY": "sk-proj-...",
-        "OPENAI_MODEL": "text-embedding-3-small"
+        "MCP_TRANSPORT_MODE": "stdio"
       }
     }
   }
 }
 ```
 
-### Multiple Configurations
+### SSE Configuration
 
-You can have different configurations for different environments:
+For HTTP/web clients, configure SSE mode:
+
+```json
+{
+  "mcpServers": {
+    "memory-sse": {
+      "type": "sse",
+      "url": "http://localhost:3000/sse",
+      "env": {
+        "MCP_TRANSPORT_MODE": "sse"
+      }
+    }
+  }
+}
+```
+
+### Dual Mode Configuration
+
+Support both STDIO and SSE simultaneously:
+
+```json
+{
+  "mcpServers": {
+    "memory-stdio": {
+      "command": "node",
+      "args": ["/absolute/path/to/dist/index.js"],
+      "env": {
+        "MCP_TRANSPORT_MODE": "both"
+      }
+    },
+    "memory-sse": {
+      "type": "sse", 
+      "url": "http://localhost:3000/sse"
+    }
+  }
+}
+```
+
+### Environment-Specific Configurations
 
 ```json
 {
@@ -82,14 +144,18 @@ You can have different configurations for different environments:
       "args": ["run", "dev"],
       "cwd": "/path/to/cldmemory",
       "env": {
-        "NODE_ENV": "development"
+        "NODE_ENV": "development",
+        "MCP_TRANSPORT_MODE": "stdio"
       }
     },
     "memory-prod": {
       "command": "node",
       "args": ["/path/to/cldmemory/dist/index.js"],
       "env": {
-        "NODE_ENV": "production"
+        "NODE_ENV": "production",
+        "MCP_TRANSPORT_MODE": "both",
+        "MCP_HOST": "0.0.0.0",
+        "MCP_CORS_ORIGIN": "https://yourdomain.com"
       }
     }
   }
@@ -190,6 +256,74 @@ For better performance with large memory collections:
 }
 ```
 
+## Docker Deployment
+
+### Docker Compose (Recommended)
+
+The included `docker-compose.yml` provides a complete setup:
+
+```yaml
+version: '3.8'
+services:
+  mcp-cldmemory-server:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - MCP_TRANSPORT_MODE=sse
+      - MCP_HOST=0.0.0.0
+      - QDRANT_URL=http://mcp-cldmemory-qdrant:6333
+    depends_on:
+      - mcp-cldmemory-qdrant
+      
+  mcp-cldmemory-qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+```
+
+### Deployment Commands
+
+```bash
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Scale server instances
+docker-compose up -d --scale mcp-cldmemory-server=3
+
+# Stop services
+docker-compose down
+```
+
+### Environment Configuration for Docker
+
+Create a `.env` file for Docker deployment:
+
+```bash
+# Docker environment
+MCP_TRANSPORT_MODE=sse
+MCP_HOST=0.0.0.0
+MCP_PORT=3000
+MCP_CORS_ORIGIN=*
+
+# Database
+QDRANT_URL=http://mcp-cldmemory-qdrant:6333
+QDRANT_COLLECTION_NAME=human_memories
+
+# OpenAI
+OPENAI_API_KEY=your-api-key-here
+OPENAI_MODEL=text-embedding-3-small
+
+# Memory settings
+MEMORY_METADATA=env:production,deployment:docker
+```
+
 ## Security Configuration
 
 ### API Key Management
@@ -202,6 +336,20 @@ export OPENAI_API_KEY=$(vault read -field=key secret/openai)
 export QDRANT_API_KEY=$(vault read -field=key secret/qdrant)
 ```
 
+### SSE Transport Security
+
+For production SSE deployments:
+
+```bash
+# Restrict CORS origins
+MCP_CORS_ORIGIN=https://yourdomain.com,https://app.yourdomain.com
+
+# Bind to specific interface
+MCP_HOST=10.0.1.100
+
+# Use HTTPS in production (configure reverse proxy)
+```
+
 ### Access Control
 
 For production use, consider:
@@ -209,6 +357,7 @@ For production use, consider:
 1. **Tool Permissions**: Use `--allowedTools` instead of `--dangerously-skip-permissions`
 2. **API Rate Limiting**: Implement rate limits for OpenAI API calls
 3. **Memory Access Control**: Add user-specific memory isolation
+4. **Transport Security**: Use HTTPS for SSE transport in production
 
 ## Performance Tuning
 

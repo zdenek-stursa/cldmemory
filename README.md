@@ -34,27 +34,54 @@ A human-like memory system using Qdrant vector database and OpenAI embeddings, a
    # Edit .env with your settings
    ```
 
-   **New environment variables**:
+   **Required environment variables**:
+   - `QDRANT_URL` - Qdrant server URL (e.g., `http://localhost:6333`)
+   - `OPENAI_API_KEY` - Your OpenAI API key
+   - `OPENAI_MODEL` - Embedding model (default: `text-embedding-3-small`)
+
+   **Optional environment variables**:
    - `MEMORY_METADATA` - Optional metadata to include with all memories
      - Format: `"key:value,key2:value2"` or just `"value"` (stored as `user:value`)
      - Examples: `"server:prod,user:john"` or `"davidstrejc"`
+   - `MCP_TRANSPORT_MODE` - Transport protocol (`stdio`, `sse`, or `both`)
+     - `stdio` (default): Standard MCP protocol for Claude Code
+     - `sse`: HTTP Server-Sent Events for web clients
+     - `both`: Support both protocols simultaneously
+   - `MCP_PORT` - Port for SSE transport (default: `3000`)
+   - `MCP_HOST` - Host binding for SSE transport (default: `localhost`)
+   - `MCP_CORS_ORIGIN` - CORS origin for SSE transport (default: `*`)
 
-3. **Start Qdrant** (if using local):
+3. **Start services**:
+
+   **Option A: Docker Compose (Recommended)**
    ```bash
+   docker-compose up -d
+   ```
+   This starts both Qdrant and the memory server with SSE transport.
+
+   **Option B: Manual Setup**
+   ```bash
+   # Start Qdrant
    docker run -p 6333:6333 -p 6334:6334 \
      --name qdrant-memory \
      -v $(pwd)/qdrant_storage:/qdrant/storage:z \
      qdrant/qdrant
-   ```
-
-4. **Build the project**:
-   ```bash
+   
+   # Build and start memory server
    npm run build
+   npm start
    ```
 
-## Testing with Claude Code
+4. **Choose your transport**:
+   - **STDIO mode**: For Claude Code integration (default)
+   - **SSE mode**: For web applications and HTTP clients
+   - **Both modes**: Support multiple client types simultaneously
 
-Use the MCP configuration file with Claude Code CLI:
+## Usage
+
+### STDIO Mode (Claude Code Integration)
+
+Configure Claude Code with the provided MCP configuration:
 
 ```bash
 # Basic usage
@@ -65,6 +92,37 @@ claude -p "Search my memories" --mcp-config claude-code-mcp.json --dangerously-s
 
 # List available tools
 claude -p "List available memory tools" --mcp-config claude-code-mcp.json
+```
+
+### SSE Mode (HTTP API)
+
+For web applications and HTTP clients:
+
+```bash
+# Start server in SSE mode
+MCP_TRANSPORT_MODE=sse npm start
+
+# Test connection
+curl http://localhost:3000/health
+
+# Establish SSE connection
+curl -N -H "Accept: text/event-stream" http://localhost:3000/sse
+
+# Send MCP messages (in another terminal)
+curl -X POST http://localhost:3000/messages \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+### Dual Mode (Both Protocols)
+
+Support both STDIO and SSE simultaneously:
+
+```bash
+# Start in dual mode
+MCP_TRANSPORT_MODE=both npm start
+
+# Now both Claude Code (STDIO) and web clients (SSE) can connect
 ```
 
 Available MCP tools (prefixed with `mcp__memory__`):
@@ -99,7 +157,30 @@ search_memories({
 })
 ```
 
-### New Features
+## Transport Modes
+
+This memory server supports multiple transport protocols:
+
+### STDIO Transport (Default)
+- **Use case**: Claude Code integration
+- **Protocol**: Standard MCP over stdin/stdout
+- **Configuration**: Set `MCP_TRANSPORT_MODE=stdio` (default)
+
+### SSE Transport (HTTP)
+- **Use case**: Web applications, HTTP clients
+- **Protocol**: Server-Sent Events over HTTP
+- **Endpoints**:
+  - `GET /sse` - Establish SSE connection
+  - `POST /messages` - Send MCP messages
+  - `GET /health` - Health check
+  - `GET /ping` - Ping endpoint
+- **Configuration**: Set `MCP_TRANSPORT_MODE=sse`
+
+### Dual Transport Mode
+- **Use case**: Support both client types simultaneously
+- **Configuration**: Set `MCP_TRANSPORT_MODE=both`
+
+## New Features
 
 **Automatic Project Tracking**: All memories now include a `project` field that captures the hostname and current working directory (e.g., `"myserver:/home/user/project"`).
 
@@ -112,6 +193,8 @@ This metadata is automatically:
 - Added to all new memories
 - Included in memory embeddings for better search relevance
 - Used in search queries to improve context matching
+
+**Docker Deployment**: Full containerization support with docker-compose for easy deployment and scaling.
 
 ## Memory Analytics Tool
 
