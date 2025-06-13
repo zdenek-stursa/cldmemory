@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Memory Analytics CLI Tool
+# Usage: ./memory-analytics [command] [options]
+
+# Configuration from your MCP config
+QDRANT_URL="http://memory.apertia.ai:6333"
+QDRANT_API_KEY="otUlPIRfOAwmTwSUYQnHpVHL13kXF0X36YiSgjHHgII="
+COLLECTION_NAME="human_memories"
+
+# Allow overrides via environment variables
+QDRANT_URL="${MEMORY_QDRANT_URL:-$QDRANT_URL}"
+QDRANT_API_KEY="${MEMORY_QDRANT_API_KEY:-$QDRANT_API_KEY}"
+COLLECTION_NAME="${MEMORY_COLLECTION_NAME:-$COLLECTION_NAME}"
+
+# Build the project if needed
+if [ ! -d "dist" ]; then
+  echo "Building project..."
+  npm run build
+fi
+
+# Run the analytics tool
+node dist/cli/memory-analytics.js \
+  --url "$QDRANT_URL" \
+  --api-key "$QDRANT_API_KEY" \
+  --collection "$COLLECTION_NAME" \
+  "$@"

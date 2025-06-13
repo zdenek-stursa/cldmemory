@@ -113,6 +113,20 @@ This metadata is automatically:
 - Included in memory embeddings for better search relevance
 - Used in search queries to improve context matching
 
+## Memory Analytics Tool
+
+A comprehensive CLI tool is included for analyzing memories:
+
+```bash
+# Quick start
+./memory-analytics count    # Count memories by agent
+./memory-analytics tags     # Analyze tag usage
+./memory-analytics compare  # Compare agents
+./memory-analytics all      # Run all analytics
+```
+
+See [docs/MEMORY_ANALYTICS.md](docs/MEMORY_ANALYTICS.md) for detailed documentation.
+
 ## Development
 
 - `npm run dev` - Run in development mode
