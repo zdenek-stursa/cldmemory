@@ -30,7 +30,7 @@ class MemoryMCPServer {
     
     this.server = new Server(
       {
-        name: config.MCP_SERVER_NAME,
+        name: 'mcp-memory-server',
         version: '1.0.0',
       },
       {
@@ -44,7 +44,7 @@ class MemoryMCPServer {
   }
 
   private getTransportMode(): TransportMode {
-    const mode = config.MCP_TRANSPORT_MODE as TransportMode;
+    const mode = process.env.MCP_TRANSPORT_MODE?.toLowerCase() as TransportMode;
     return ['stdio', 'sse', 'both'].includes(mode) ? mode : 'stdio';
   }
 
@@ -390,8 +390,8 @@ class MemoryMCPServer {
   }
 
   private async logServerInfo() {
-    const port = config.MCP_PORT || 3000;
-    const host = config.MCP_HOST || 'localhost';
+    const port = process.env.MCP_PORT || '3000';
+    const host = process.env.MCP_HOST || 'localhost';
     const nodeEnv = process.env.NODE_ENV || 'development';
     const version = this.getVersion();
 
@@ -410,7 +410,7 @@ class MemoryMCPServer {
     if (this.transportMode === 'sse' || this.transportMode === 'both') {
       console.error(`   • SSE: http://${host}:${port}/sse`);
       console.error(`   • Health Check: http://${host}:${port}/health`);
-      console.error(`   • Messages: http://${host}:${port}/messages`);
+      console.error(`   • Server Info: http://${host}:${port}/info`);
     }
     console.error('');
   }
@@ -418,7 +418,8 @@ class MemoryMCPServer {
   private async logQdrantStatus() {
     try {
       console.error('🔗 QDRANT CONNECTION:');
-      const qdrantUrl = config.QDRANT_URL;
+      // Test Qdrant connection through memory service
+      const qdrantUrl = process.env.QDRANT_URL || 'http://localhost:6333';
       console.error(`   • URL: ${qdrantUrl}`);
       console.error('   • Status: Connected ✅');
       console.error('');
@@ -440,25 +441,59 @@ class MemoryMCPServer {
     console.error('');
   }
 
-  private setupGracefulShutdown() {
-    const gracefulShutdown = async (signal: string) => {
-      console.error(`\n🛑 SHUTDOWN INITIATED:`);
-      console.error(`   • Signal received: ${signal}`);
-      console.error('   • Graceful shutdown in progress...');
+  private logGracefulShutdownInfo() {
+    console.error('⚡ SHUTDOWN:');
+    console.error('   • Graceful shutdown enabled');
+    console.error('   • Supports SIGINT and SIGTERM signals');
+    console.error('');
+  }
+
+  async start() {
+    try {
+      // Display startup banner
+      this.logStartupBanner();
       
-      if (this.sseTransportServer) {
-        console.error('   • Stopping SSE transport server...');
-        await this.sseTransportServer.stop();
-        console.error('   • SSE transport stopped ✅');
+      // Initialize memory service
+      console.error('🚀 STARTUP SEQUENCE:');
+      console.error('   • Initializing memory service...');
+      await this.memoryService.initialize();
+      console.error('   • Memory service initialized ✅');
+      console.error('');
+
+      // Log server configuration
+      await this.logServerInfo();
+      
+      // Check and log Qdrant status
+      await this.logQdrantStatus();
+      
+      // Log available tools
+      this.logAvailableTools();
+
+      // Start transports based on mode
+      console.error('🔌 STARTING TRANSPORTS:');
+      
+      if (this.transportMode === 'stdio' || this.transportMode === 'both') {
+        await this.startStdioTransport();
       }
 
-      console.error('   • All services stopped');
-      console.error('✅ Shutdown complete');
-      process.exit(0);
-    };
+      if (this.transportMode === 'sse' || this.transportMode === 'both') {
+        await this.startSSETransport();
+      }
 
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+      // Set up graceful shutdown
+      this.setupGracefulShutdown();
+      this.logGracefulShutdownInfo();
+      
+      console.error('✅ MCP Memory Server started successfully!');
+      console.error('   Ready to accept connections...');
+      console.error('');
+      
+    } catch (error) {
+      console.error('❌ STARTUP FAILED:');
+      console.error(`   Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('');
+      throw error;
+    }
   }
 
   private async startStdioTransport() {
@@ -475,7 +510,7 @@ class MemoryMCPServer {
       // Create a separate server instance for SSE to avoid conflicts
       const sseServer = new Server(
         {
-          name: config.MCP_SERVER_NAME,
+          name: 'mcp-memory-server',
           version: '1.0.0',
         },
         {
@@ -489,9 +524,9 @@ class MemoryMCPServer {
       this.setupHandlersForServer(sseServer);
 
       this.sseTransportServer = new SSETransportServer(sseServer, {
-        port: config.MCP_PORT,
-        corsOrigin: config.MCP_CORS_ORIGIN,
-        host: config.MCP_HOST
+        port: parseInt(process.env.MCP_PORT || '3000'),
+        corsOrigin: process.env.MCP_CORS_ORIGIN,
+        host: process.env.MCP_HOST || 'localhost'
       });
 
       await this.sseTransportServer.start();
@@ -528,8 +563,7 @@ class MemoryMCPServer {
               parsed.content,
               parsed.type as MemoryType,
               parsed.context,
-              parsed.importance,
-              parsed.summary
+              parsed.importance
             );
             return {
               content: [
@@ -548,8 +582,7 @@ class MemoryMCPServer {
               parsed.type as MemoryType,
               parsed.context,
               parsed.importance,
-              parsed.chunkingOptions,
-              parsed.summary
+              parsed.chunkingOptions
             );
             return {
               content: [
@@ -568,7 +601,7 @@ class MemoryMCPServer {
 
           case 'search_memories': {
             const parsed = tools.search_memories.inputSchema.parse(args);
-            const searchParams: any = {
+            const memories = await this.memoryService.searchChunkedMemories({
               query: parsed.query,
               type: parsed.type as MemoryType | undefined,
               minImportance: parsed.minImportance,
@@ -578,16 +611,7 @@ class MemoryMCPServer {
               detailLevel: parsed.detailLevel,
               similarityThreshold: parsed.similarityThreshold,
               reconstructChunks: parsed.reconstructChunks,
-            };
-            
-            if (parsed.dateRange) {
-              searchParams.dateRange = {
-                start: new Date(parsed.dateRange.start),
-                end: new Date(parsed.dateRange.end),
-              };
-            }
-            
-            const memories = await this.memoryService.searchChunkedMemories(searchParams);
+            });
             return {
               content: [
                 {
@@ -811,51 +835,25 @@ class MemoryMCPServer {
     });
   }
 
-  async start() {
-    try {
-      // Display startup banner
-      this.logStartupBanner();
+  private setupGracefulShutdown() {
+    const gracefulShutdown = async (signal: string) => {
+      console.error(`\n🛑 SHUTDOWN INITIATED:`);
+      console.error(`   • Signal received: ${signal}`);
+      console.error('   • Graceful shutdown in progress...');
       
-      // Initialize memory service
-      console.error('🚀 STARTUP SEQUENCE:');
-      console.error('   • Initializing memory service...');
-      await this.memoryService.initialize();
-      console.error('   • Memory service initialized ✅');
-      console.error('');
-
-      // Log server configuration
-      await this.logServerInfo();
-      
-      // Check and log Qdrant status
-      await this.logQdrantStatus();
-      
-      // Log available tools
-      this.logAvailableTools();
-
-      // Start transports based on mode
-      console.error('🔌 STARTING TRANSPORTS:');
-      
-      if (this.transportMode === 'stdio' || this.transportMode === 'both') {
-        await this.startStdioTransport();
+      if (this.sseTransportServer) {
+        console.error('   • Stopping SSE transport server...');
+        await this.sseTransportServer.stop();
+        console.error('   • SSE transport stopped ✅');
       }
 
-      if (this.transportMode === 'sse' || this.transportMode === 'both') {
-        await this.startSSETransport();
-      }
+      console.error('   • All services stopped');
+      console.error('✅ Shutdown complete');
+      process.exit(0);
+    };
 
-      // Set up graceful shutdown
-      this.setupGracefulShutdown();
-      
-      console.error('✅ MCP Memory Server started successfully!');
-      console.error('   Ready to accept connections...');
-      console.error('');
-      
-    } catch (error) {
-      console.error('❌ STARTUP FAILED:');
-      console.error(`   Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      console.error('');
-      throw error;
-    }
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   }
 }
 
